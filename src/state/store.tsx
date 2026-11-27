@@ -12,6 +12,7 @@ import {
 } from '../lib/leetcode';
 import { autoComplete, registerBackgroundSync, STORAGE_KEY } from '../lib/background';
 import { rescheduleAll } from '../lib/notifications';
+import { findAutoPlanProblems, pickAutoPlanProblems, rememberSolved } from '../lib/planning';
 import type { AppState, Difficulty, PlanItem, ProblemRef, Reminder } from '../lib/types';
 
 const AUTO_SYNC_MS = 5 * 60 * 1000;
@@ -62,6 +63,7 @@ interface Store {
   clearPlan: () => void;
   clearDone: () => void;
   toggleDone: (id: string) => void;
+  markPreviouslySolved: (id: string) => void;
   upsertReminder: (r: Omit<Reminder, 'id'> & { id?: string }) => void;
   removeReminder: (id: string) => void;
   setSetting: <K extends 'alarmMode' | 'contestAlarms' | 'fallbackApi' | 'screenAlarms' | 'screenAlarmsOverApps'>(k: K, v: AppState[K]) => void;
@@ -77,6 +79,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [syncError, setSyncError] = useState<string>();
   const [queued, setQueued] = useState(0);
   const stateRef = useRef(state);
+  const planningRef = useRef(false);
   stateRef.current = state;
 
   // Load once
@@ -114,15 +117,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const val = <T,>(r: PromiseSettledResult<T>) => (r.status === 'fulfilled' ? r.value : undefined);
     const failed = [daily, contests, profile].find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined;
     if (failed) setSyncError(friendlyError(failed.reason));
-    const p = val(profile);
-    setState((s) => ({
-      ...s,
-      daily: val(daily) ?? s.daily,
-      contests: val(contests) ?? s.contests,
-      profile: p ?? s.profile,
-      plan: p ? autoComplete(s.plan, p.recent) : s.plan,
-      lastSync: failed ? s.lastSync : Date.now(),
-    }));
+    setState((s) => {
+      const p = s.username === username ? val(profile) : undefined;
+      return {
+        ...s,
+        daily: val(daily) ?? s.daily,
+        contests: val(contests) ?? s.contests,
+        profile: p ?? s.profile,
+        solvedQuestions: rememberSolved(s, p?.recent.map((submission) => submission.slug)),
+        plan: p ? autoComplete(s.plan, p.recent) : s.plan,
+        lastSync: failed || s.username !== username ? s.lastSync : Date.now(),
+      };
+    });
     setSyncing(false);
   }, []);
 
@@ -149,6 +155,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         ...s,
         username: profile.username,
         profile,
+        solvedQuestions: rememberSolved({ username: profile.username, profile, solvedQuestions: rememberSolved(s) }),
         plan: autoComplete(s.plan, profile.recent),
         lastSync: Date.now(),
       }));
@@ -162,26 +169,41 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const autoPlan = useCallback(async (o: AutoPlanOptions) => {
-    const need = o.perDay * o.days;
-    const { problems } = await listProblems({ tags: [o.tagSlug], difficulty: o.difficulty, limit: Math.min(100, need * 4 + 20) });
-    const s = stateRef.current;
-    const taken = new Set([...s.plan.map((p) => p.slug), ...(s.profile?.recent ?? []).map((r) => r.slug)]);
-    // Easiest (highest acceptance) first, so the week ramps up naturally.
-    const picks = problems
-      .filter((p) => !p.paidOnly && !taken.has(p.slug))
-      .sort((a, b) => (b.acRate ?? 0) - (a.acRate ?? 0))
-      .slice(0, need);
-    const now = Date.now();
-    const items: PlanItem[] = picks.map((p, i) => ({
-      ...p,
-      id: uid(),
-      date: dayKey(addDays(new Date(), Math.floor(i / o.perDay))),
-      time: o.time,
-      status: 'todo',
-      addedAt: now,
-    }));
-    setState((st) => ({ ...st, plan: [...st.plan, ...items] }));
-    return items.length;
+    if (planningRef.current) return 0;
+    planningRef.current = true;
+    try {
+      const need = o.perDay * o.days;
+      const { username, profile } = stateRef.current;
+      const fresh = username && Date.now() - (profile?.fetchedAt ?? 0) > AUTO_SYNC_MS
+        ? await fetchProfile(username).catch(() => undefined)
+        : undefined;
+      const accepted = fresh?.recent.map((submission) => submission.slug);
+      const snapshot = () => {
+        const current = stateRef.current;
+        if (current.username !== username) throw new Error('Your LeetCode account changed. Try Auto-plan again.');
+        return { ...current, solvedQuestions: rememberSolved(current, accepted) };
+      };
+      const problems = await findAutoPlanProblems(listProblems, { tags: [o.tagSlug], difficulty: o.difficulty }, need, snapshot);
+      const now = new Date();
+      const picks = pickAutoPlanProblems(problems, snapshot(), need);
+      const items: PlanItem[] = picks.map((p, i) => ({
+        ...p,
+        id: uid(),
+        date: dayKey(addDays(now, Math.floor(i / o.perDay))),
+        time: o.time,
+        status: 'todo',
+        addedAt: now.getTime(),
+      }));
+      setState((s) => {
+        if (s.username !== username) return s;
+        const updated = { ...s, solvedQuestions: rememberSolved(s, accepted) };
+        const available = new Set(pickAutoPlanProblems(items, updated, need).map((p) => p.slug));
+        return { ...updated, plan: [...s.plan, ...items.filter((p) => available.has(p.slug))] };
+      });
+      return items.length;
+    } finally {
+      planningRef.current = false;
+    }
   }, []);
 
   const value = useMemo<Store>(
@@ -194,7 +216,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       sync,
       connect,
       autoPlan,
-      disconnect: () => setState((s) => ({ ...s, username: undefined, profile: undefined })),
+      disconnect: () => setState((s) => ({ ...s, username: undefined, profile: undefined, solvedQuestions: rememberSolved(s) })),
       addToPlan: (p, date, opts) =>
         setState((s) => ({
           ...s,
@@ -207,8 +229,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setState((s) => ({ ...s, plan: s.plan.map((x) => (x.id === id ? { ...x, ...patch } : x)) })),
       removePlan: (id) => setState((s) => ({ ...s, plan: s.plan.filter((x) => x.id !== id) })),
       removeMany: (ids) => setState((s) => ({ ...s, plan: s.plan.filter((x) => !ids.includes(x.id)) })),
-      clearPlan: () => setState((s) => ({ ...s, plan: [] })),
-      clearDone: () => setState((s) => ({ ...s, plan: s.plan.filter((x) => x.status !== 'done') })),
+      clearPlan: () => setState((s) => ({
+        ...s,
+        solvedQuestions: rememberSolved(s, s.plan.filter((item) => item.status === 'done').map((item) => item.slug)),
+        plan: [],
+      })),
+      clearDone: () => setState((s) => ({
+        ...s,
+        solvedQuestions: rememberSolved(s, s.plan.filter((item) => item.status === 'done').map((item) => item.slug)),
+        plan: s.plan.filter((item) => item.status !== 'done'),
+      })),
+      markPreviouslySolved: (id) => setState((s) => {
+        const problem = s.plan.find((item) => item.id === id);
+        if (!problem) return s;
+        return {
+          ...s,
+          solvedQuestions: rememberSolved(s, [problem.slug]),
+          plan: s.plan.map((item) => item.id === id ? { ...item, status: 'done', doneAt: undefined } : item),
+        };
+      }),
       toggleDone: (id) =>
         setState((s) => ({
           ...s,

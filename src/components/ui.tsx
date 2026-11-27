@@ -155,12 +155,14 @@ export function ProblemRow({
   right,
   onPress,
   done,
+  alreadySolved,
   meta,
 }: {
   p: ProblemRef;
   right?: React.ReactNode;
   onPress?: () => void;
   done?: boolean;
+  alreadySolved?: boolean;
   meta?: string;
 }) {
   return (
@@ -171,6 +173,7 @@ export function ProblemRow({
         </Text>
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <DifficultyBadge d={p.difficulty} />
+          {alreadySolved ? <Text style={[s.badge, { color: colors.good, borderColor: colors.good + '60', backgroundColor: colors.good + '26' }]}>Already solved</Text> : null}
           {meta ? <Text style={s.meta}>{meta}</Text> : null}
           {p.tags?.slice(0, 2).map((t) => (
             <Text key={t} style={s.meta}>

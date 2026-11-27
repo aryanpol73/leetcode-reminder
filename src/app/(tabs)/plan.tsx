@@ -1,17 +1,20 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { Button, Card, Check, Chip, ProblemRow, Screen, SectionLabel, Stepper, s } from '../../components/ui';
 import { confirmAction } from '../../lib/confirm';
 import { addDays, dayKey, friendlyDay } from '../../lib/dates';
 import { POPULAR_TAGS } from '../../lib/leetcode';
+import { knownSolved } from '../../lib/planning';
 import type { Difficulty, PlanItem } from '../../lib/types';
 import { useStore } from '../../state/store';
 import { colors } from '../../theme';
 
 export default function Plan() {
-  const { state, toggleDone, removePlan, removeMany, clearPlan, updatePlan, clearDone, autoPlan } = useStore();
+  const { state, toggleDone, markPreviouslySolved, removePlan, removeMany, clearPlan, updatePlan, clearDone, autoPlan } = useStore();
   const [showAuto, setShowAuto] = useState(false);
+  const [autoResult, setAutoResult] = useState<string>();
+  const solved = knownSolved(state);
   const today = dayKey();
 
   const groups = useMemo(() => {
@@ -47,11 +50,26 @@ export default function Plan() {
           <Button label="+ Add problem" onPress={() => router.push('/add-problem')} />
         </View>
         <View style={{ flex: 1 }}>
-          <Button kind="ghost" label={showAuto ? 'Close auto-plan' : '✨ Auto-plan'} onPress={() => setShowAuto((v) => !v)} />
+          <Button kind="ghost" label={showAuto ? 'Close auto-plan' : '✨ Auto-plan'} onPress={() => {
+            setAutoResult(undefined);
+            setShowAuto((v) => !v);
+          }} />
         </View>
       </View>
 
-      {showAuto ? <AutoPlanner onDone={() => setShowAuto(false)} autoPlan={autoPlan} weak={weakTopics(state.profile?.skills)} /> : null}
+      {showAuto ? (
+        <AutoPlanner
+          onDone={(count, requested) => {
+            setAutoResult(count < requested
+              ? `Added ${count} of ${requested} problems. Try another topic or difficulty to fill the plan.`
+              : `Added ${count} ${count === 1 ? 'problem' : 'problems'} to your plan.`);
+            setShowAuto(false);
+          }}
+          autoPlan={autoPlan}
+          weak={weakTopics(state.profile?.skills)}
+        />
+      ) : null}
+      {autoResult ? <Text accessibilityLiveRegion="polite" style={s.meta}>{autoResult}</Text> : null}
 
       {groups.length === 0 && !showAuto ? (
         <Card>
@@ -78,6 +96,7 @@ export default function Plan() {
                 {i > 0 ? <View style={s.divider} /> : null}
                 <ProblemRow
                   p={p}
+                  alreadySolved={solved.has(p.slug)}
                   meta={[p.time ? `⏰ ${p.time}` : '', p.note ?? ''].filter(Boolean).join(' · ') || undefined}
                   right={
                     <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
@@ -96,6 +115,10 @@ export default function Plan() {
                 />
                 {openId === p.id ? (
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 10 }}>
+                    <Chip label="Mark as already solved" onPress={() => {
+                      markPreviouslySolved(p.id);
+                      setOpenId(undefined);
+                    }} />
                     {p.date !== today ? <Chip label="Move to today" onPress={() => (updatePlan(p.id, { date: today }), setOpenId(undefined))} /> : null}
                     {p.date !== tomorrow ? <Chip label="Push to tomorrow" onPress={() => (updatePlan(p.id, { date: tomorrow }), setOpenId(undefined))} /> : null}
                     <Pressable
@@ -125,7 +148,7 @@ export default function Plan() {
             {done.slice(0, 15).map((p, i) => (
               <View key={p.id}>
                 {i > 0 ? <View style={s.divider} /> : null}
-                <ProblemRow p={p} done meta={p.doneAt ? friendlyDay(dayKey(new Date(p.doneAt))) : undefined} right={<Check done onPress={() => toggleDone(p.id)} />} />
+                <ProblemRow p={p} done alreadySolved={!p.doneAt && solved.has(p.slug)} meta={p.doneAt ? friendlyDay(dayKey(new Date(p.doneAt))) : undefined} right={<Check done onPress={() => toggleDone(p.id)} />} />
               </View>
             ))}
           </Card>
@@ -149,7 +172,7 @@ function AutoPlanner({
   autoPlan,
   weak,
 }: {
-  onDone: () => void;
+  onDone: (count: number, requested: number) => void;
   autoPlan: ReturnType<typeof useStore>['autoPlan'];
   weak: string[];
 }) {
@@ -158,15 +181,17 @@ function AutoPlanner({
   const [perDay, setPerDay] = useState(1);
   const [days, setDays] = useState(7);
   const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<string>();
 
   const go = async () => {
     setBusy(true);
+    setFeedback(undefined);
     try {
       const n = await autoPlan({ tagSlug: tag, difficulty, perDay, days });
-      Alert.alert(n ? `Planned ${n} problems` : 'Nothing new found', n ? 'Your alarms now name each day’s problem.' : 'Try another topic or difficulty.');
-      if (n) onDone();
-    } catch (e: any) {
-      Alert.alert('Could not reach LeetCode', e?.message);
+      if (n) onDone(n, perDay * days);
+      else setFeedback('No new problems found. Try another topic or difficulty.');
+    } catch (e) {
+      setFeedback(e instanceof Error ? e.message : 'Could not reach LeetCode. Try again.');
     } finally {
       setBusy(false);
     }
@@ -175,7 +200,8 @@ function AutoPlanner({
   return (
     <Card style={{ borderColor: colors.accent }}>
       <Text style={[s.body, { fontWeight: '700' }]}>✨ Auto-plan from a topic</Text>
-      <Text style={s.meta}>Picks unsolved, free problems (easiest first) and spreads them over the coming days.</Text>
+      <Text style={s.meta}>Picks free problems, easiest first, and skips known solves and questions already in your plan.</Text>
+      <Text style={s.meta}>LeetPing remembers the solves it syncs. Use “Mark as already solved” for older questions it missed.</Text>
       {weak.length ? <Text style={s.meta}>Suggested from your weakest topics: {weak.map((w) => POPULAR_TAGS.find((t) => t.slug === w)?.name).join(', ')}</Text> : null}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {POPULAR_TAGS.map((t) => (
@@ -199,6 +225,7 @@ function AutoPlanner({
         ))}
       </View>
       <Button label={`Plan ${perDay * days} problems`} onPress={go} loading={busy} />
+      {feedback ? <Text accessibilityLiveRegion="polite" style={s.meta}>{feedback}</Text> : null}
     </Card>
   );
 }

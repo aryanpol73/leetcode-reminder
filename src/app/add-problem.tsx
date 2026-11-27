@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, Switch, Text, TextInput, View
 import { Button, Card, Chip, ProblemRow, SectionLabel, TimePicker, s } from '../components/ui';
 import { addDays, DAY_SHORT, dayKey, parseDayKey, toHHmm } from '../lib/dates';
 import { POPULAR_TAGS, resolveProblems } from '../lib/leetcode';
+import { knownSolved } from '../lib/planning';
 import type { Difficulty, ProblemRef } from '../lib/types';
 import { useStore } from '../state/store';
 import { colors } from '../theme';
@@ -44,7 +45,7 @@ export default function AddProblem() {
   }, [query, tag, difficulty]);
 
   const days = Array.from({ length: 14 }, (_, i) => dayKey(addDays(new Date(), i)));
-  const solvedSlugs = new Set(state.profile?.recent.map((r) => r.slug));
+  const solvedSlugs = knownSolved(state);
   const plannedSlugs = new Set(state.plan.filter((p) => p.status === 'todo').map((p) => p.slug));
 
   const add = (p: ProblemRef) => {
@@ -117,7 +118,8 @@ export default function AddProblem() {
               {i > 0 ? <View style={s.divider} /> : null}
               <ProblemRow
                 p={p}
-                meta={[solvedSlugs.has(p.slug) ? '✓ solved recently' : '', inPlan ? 'in plan' : '', p.acRate ? `${p.acRate.toFixed(0)}%` : ''].filter(Boolean).join(' · ') || undefined}
+                alreadySolved={solvedSlugs.has(p.slug)}
+                meta={[inPlan ? 'in plan' : '', p.acRate ? `${p.acRate.toFixed(0)}%` : ''].filter(Boolean).join(' · ') || undefined}
                 right={
                   <Pressable
                     onPress={() => add(p)}
