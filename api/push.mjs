@@ -2,14 +2,19 @@
 // POST /api/push            { subscription, alarms: [{ at, title, body, url, tag }] }
 //                           Replaces this device's queued alarms (next 14 days).
 // DELETE /api/push          { subscription } -> forget this device
-import { isValidSub, json, pushConfigured, readBody, redis, subId } from './_lib.mjs';
+import { isValidSub, json, pushConfigured, readBody, redis, subId, vapidKeys } from './_lib.mjs';
 
 const MAX_ALARMS = 80;
 const clip = (s, n) => String(s ?? '').slice(0, n);
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
-    return json(res, 200, { enabled: pushConfigured(), publicKey: process.env.VAPID_PUBLIC_KEY || null });
+    if (!pushConfigured()) return json(res, 200, { enabled: false, publicKey: null });
+    try {
+      return json(res, 200, { enabled: true, publicKey: (await vapidKeys()).publicKey });
+    } catch {
+      return json(res, 200, { enabled: false, publicKey: null });
+    }
   }
   if (!pushConfigured()) return json(res, 503, { error: 'Push is not configured on this server' });
 

@@ -1,30 +1,27 @@
 // Shared helpers for the push backend (Vercel serverless functions).
 //
-// Env vars:
-//   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (mailto: or https: contact)
-//   UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN  (free Upstash Redis database)
-//   CRON_SECRET  (protects /api/dispatch)
+// Only a Redis database is required. Connect Upstash Redis from Vercel → Storage (it injects
+// KV_REST_API_URL / KV_REST_API_TOKEN), or set UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN.
+//
+// Optional env vars:
+//   VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY  otherwise generated once and stored in Redis
+//   VAPID_SUBJECT                         contact URL/mailto for push services
+//   CRON_SECRET                           if set, /api/dispatch requires it
 import * as webpushNs from 'web-push';
 const webpush = webpushNs.default ?? webpushNs;
 
-export function pushConfigured() {
-  return !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY && process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
-}
+const REDIS_URL = () => process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+const REDIS_TOKEN = () => process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 
-let vapidSet = false;
-export function push() {
-  if (!vapidSet) {
-    webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'https://github.com/aryanpol73/leetcode-reminder', process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
-    vapidSet = true;
-  }
-  return webpush;
+export function pushConfigured() {
+  return !!(REDIS_URL() && REDIS_TOKEN());
 }
 
 /** Runs Redis commands through Upstash's REST pipeline. Returns an array of results. */
 export async function redis(commands) {
-  const res = await fetch(`${process.env.UPSTASH_REDIS_REST_URL}/pipeline`, {
+  const res = await fetch(`${REDIS_URL()}/pipeline`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${REDIS_TOKEN()}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(commands),
   });
   if (!res.ok) throw new Error(`Redis ${res.status}`);
@@ -33,6 +30,26 @@ export async function redis(commands) {
     if (r.error) throw new Error(r.error);
     return r.result;
   });
+}
+
+let vapid;
+/** VAPID keys from env, or generated on first use and persisted in Redis (SET NX keeps them stable). */
+export async function vapidKeys() {
+  if (vapid) return vapid;
+  if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+    vapid = { publicKey: process.env.VAPID_PUBLIC_KEY, privateKey: process.env.VAPID_PRIVATE_KEY };
+  } else {
+    const fresh = webpush.generateVAPIDKeys();
+    const [, stored] = await redis([['SET', 'lp:vapid', JSON.stringify(fresh), 'NX'], ['GET', 'lp:vapid']]);
+    vapid = JSON.parse(stored);
+  }
+  return vapid;
+}
+
+export async function push() {
+  const k = await vapidKeys();
+  webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'https://github.com/aryanpol73/leetcode-reminder', k.publicKey, k.privateKey);
+  return webpush;
 }
 
 /** Stable id for a push subscription (its endpoint is unique per browser install). */

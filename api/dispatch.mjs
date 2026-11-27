@@ -1,4 +1,4 @@
-// GET /api/dispatch?key=CRON_SECRET  (or header Authorization: Bearer CRON_SECRET)
+// GET /api/dispatch  (add ?key=CRON_SECRET if that env var is set)
 // Sends every alarm that is due. Call it every minute from a scheduler
 // (cron-job.org, GitHub Actions, Vercel Cron on Pro). See README → "Push alarms".
 import { json, push, pushConfigured, redis } from './_lib.mjs';
@@ -8,7 +8,8 @@ const LATE_LIMIT_MS = 60 * 60_000; // drop alarms more than an hour late instead
 export default async function handler(req, res) {
   const secret = process.env.CRON_SECRET;
   const given = req.query?.key || (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  if (!secret || given !== secret) return json(res, 401, { error: 'Unauthorized' });
+  // Optional: dispatch only sends alarms that are already due, so it is safe to leave open.
+  if (secret && given !== secret) return json(res, 401, { error: 'Unauthorized' });
   if (!pushConfigured()) return json(res, 503, { error: 'Push is not configured' });
 
   const now = Date.now();
@@ -31,7 +32,7 @@ export default async function handler(req, res) {
       const sub = subById[a.id];
       if (!sub || now - a.at > LATE_LIMIT_MS) return;
       try {
-        await push().sendNotification(sub, JSON.stringify({ title: a.title, body: a.body, url: a.url, tag: a.tag }), {
+        await (await push()).sendNotification(sub, JSON.stringify({ title: a.title, body: a.body, url: a.url, tag: a.tag }), {
           TTL: 3600,
           urgency: 'high',
         });

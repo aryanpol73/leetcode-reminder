@@ -25,7 +25,7 @@ const zsets = new Map(); // key -> Map(member -> score)
 function run([cmd, ...a]) {
   switch (cmd.toUpperCase()) {
     case 'GET': return kv.get(a[0]) ?? null;
-    case 'SET': kv.set(a[0], a[1]); return 'OK';
+    case 'SET': if (a.includes('NX') && kv.has(a[0])) return null; kv.set(a[0], a[1]); return 'OK';
     case 'DEL': return a.reduce((n, k) => n + (kv.delete(k) | sets.delete(k) | zsets.delete(k)), 0);
     case 'EXPIRE': return 1;
     case 'SADD': { const s = sets.get(a[0]) ?? new Set(); a.slice(1).forEach((m) => s.add(m)); sets.set(a[0], s); return a.length - 1; }
@@ -38,10 +38,7 @@ function run([cmd, ...a]) {
   }
 }
 
-const keys = webpush.generateVAPIDKeys();
 Object.assign(process.env, {
-  VAPID_PUBLIC_KEY: keys.publicKey,
-  VAPID_PRIVATE_KEY: keys.privateKey,
   VAPID_SUBJECT: 'https://github.com/aryanpol73/leetcode-reminder',
   UPSTASH_REDIS_REST_URL: `http://localhost:${PORT}/__redis`,
   UPSTASH_REDIS_REST_TOKEN: 'local',
