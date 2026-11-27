@@ -35,7 +35,8 @@ export default function ProfileScreen() {
             autoCorrect={false}
             onSubmitEditing={onConnect}
             returnKeyType="go"
-            style={s.input}
+            // Keep the web input painted above the card's frosted background.
+            style={[s.input, { position: 'relative' }]}
           />
           <Button label="Connect" onPress={onConnect} loading={syncing} disabled={!name.trim()} />
           {syncError ? <Text style={{ color: colors.danger }}>{syncError}</Text> : null}
