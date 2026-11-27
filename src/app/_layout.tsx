@@ -1,5 +1,7 @@
+import { Sora_300Light, Sora_400Regular, Sora_600SemiBold, Sora_700Bold, Sora_800ExtraBold, useFonts } from '@expo-google-fonts/sora';
 import * as Notifications from 'expo-notifications';
 import { router, Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { Linking } from 'react-native';
@@ -16,6 +18,7 @@ import { StoreProvider } from '../state/store';
 import { colors } from '../theme';
 
 configureForeground();
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function useNotificationTaps() {
   useEffect(() => {
@@ -47,6 +50,12 @@ function useNotificationTaps() {
 
 export default function RootLayout() {
   useNotificationTaps();
+  const [fontsLoaded, fontError] = useFonts({ Sora_300Light, Sora_400Regular, Sora_600SemiBold, Sora_700Bold, Sora_800ExtraBold });
+  const ready = fontsLoaded || !!fontError;
+  useEffect(() => {
+    if (ready) SplashScreen.hideAsync().catch(() => {});
+  }, [ready]);
+  if (!ready) return null;
   return (
     <SafeAreaProvider>
       <StoreProvider>
@@ -57,6 +66,8 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: colors.bg },
             headerStyle: { backgroundColor: colors.card },
             headerTintColor: colors.text,
+            headerTitleStyle: { fontFamily: 'Sora_700Bold' },
+            headerShadowVisible: false,
           }}
         >
           <Stack.Screen name="(tabs)" />

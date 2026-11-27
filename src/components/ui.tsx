@@ -1,10 +1,16 @@
-import React from 'react';
-import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useState } from 'react';
+import { ActivityIndicator, Animated, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { formatTime } from '../lib/dates';
 import { problemUrl } from '../lib/leetcode';
 import type { Difficulty, ProblemRef } from '../lib/types';
-import { colors, diffColor, radius } from '../theme';
+import { colors, diffColor, fonts, gradients } from '../theme';
+import { Glass, haptic, usePressScale } from './glass';
+
+/** Space kept clear at the bottom of tab screens for the floating tab bar. */
+export const TAB_BAR_CLEARANCE = 120;
 
 export function Screen({
   title,
@@ -22,9 +28,10 @@ export function Screen({
   onRefresh?: () => void;
 }) {
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }} edges={['top']}>
       <ScrollView
-        contentContainerStyle={{ padding: 16, paddingBottom: 48, gap: 14 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: TAB_BAR_CLEARANCE, gap: 14 }}
+        showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         refreshControl={
           onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={colors.accent} colors={[colors.accent]} /> : undefined
@@ -44,7 +51,7 @@ export function Screen({
 }
 
 export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
-  return <View style={[s.card, style]}>{children}</View>;
+  return <Glass style={[s.card, style]}>{children}</Glass>;
 }
 
 export function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -66,19 +73,44 @@ export function Button({
   disabled?: boolean;
   small?: boolean;
 }) {
-  const bg = kind === 'primary' ? colors.accent : kind === 'danger' ? '#3A1820' : colors.cardHi;
   const fg = kind === 'primary' ? colors.accentInk : kind === 'danger' ? colors.danger : colors.text;
+  const { scale, onPressIn, onPressOut } = usePressScale(0.97);
+  const content = loading ? (
+    <ActivityIndicator color={fg} />
+  ) : (
+    <Text style={[s.btnText, { color: fg }, small && { fontSize: 13 }]}>{label}</Text>
+  );
+  const pad = small ? { paddingVertical: 8, paddingHorizontal: 12 } : null;
   return (
     <Pressable
-      onPress={onPress}
+      accessibilityRole="button"
+      onPress={() => {
+        haptic.tap();
+        onPress();
+      }}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
       disabled={disabled || loading}
-      style={({ pressed }) => [
-        s.btn,
-        small && { paddingVertical: 8, paddingHorizontal: 12 },
-        { backgroundColor: bg, opacity: disabled ? 0.45 : pressed ? 0.8 : 1 },
-      ]}
+      style={{ opacity: disabled ? 0.45 : 1 }}
     >
-      {loading ? <ActivityIndicator color={fg} /> : <Text style={[s.btnText, { color: fg }, small && { fontSize: 13 }]}>{label}</Text>}
+      <Animated.View style={{ transform: [{ scale }] }}>
+        {kind === 'primary' ? (
+          <LinearGradient
+            colors={gradients.cta}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[s.btn, pad, { boxShadow: '0 8px 22px -10px rgba(255,122,80,0.85)' }]}
+          >
+            {content}
+          </LinearGradient>
+        ) : kind === 'danger' ? (
+          <View style={[s.btn, pad, { backgroundColor: 'rgba(255,94,98,0.14)', borderWidth: 1, borderColor: 'rgba(255,94,98,0.35)' }]}>{content}</View>
+        ) : (
+          <Glass radius={14} style={[s.btn, pad]}>
+            {content}
+          </Glass>
+        )}
+      </Animated.View>
     </Pressable>
   );
 }
@@ -86,8 +118,11 @@ export function Button({
 export function Chip({ label, active, onPress }: { label: string; active?: boolean; onPress?: () => void }) {
   return (
     <Pressable
-      onPress={onPress}
-      style={[s.chip, active && { backgroundColor: colors.accent, borderColor: colors.accent }]}
+      onPress={() => {
+        haptic.tap();
+        onPress?.();
+      }}
+      style={[s.chip, active && { backgroundColor: colors.accent, borderColor: colors.accent, boxShadow: '0 0 16px -4px rgba(255,176,32,0.7)' }]}
     >
       <Text style={[s.chipText, active && { color: colors.accentInk }]}>{label}</Text>
     </Pressable>
@@ -95,7 +130,9 @@ export function Chip({ label, active, onPress }: { label: string; active?: boole
 }
 
 export function DifficultyBadge({ d }: { d: Difficulty }) {
-  return <Text style={[s.badge, { color: diffColor[d], backgroundColor: diffColor[d] + '22' }]}>{d}</Text>;
+  return (
+    <Text style={[s.badge, { color: diffColor[d], backgroundColor: diffColor[d] + '26', borderColor: diffColor[d] + '60' }]}>{d}</Text>
+  );
 }
 
 export function ProblemRow({
@@ -166,24 +203,38 @@ export function TimePicker({ hour, minute, onChange }: { hour: number; minute: n
 }
 
 export function Check({ done, onPress }: { done?: boolean; onPress: () => void }) {
+  const scale = useState(() => new Animated.Value(1))[0];
+  const pop = () => {
+    scale.setValue(0.7);
+    Animated.spring(scale, { toValue: 1, useNativeDriver: Platform.OS !== 'web', speed: 18, bounciness: 14 }).start();
+  };
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => {
+        if (done) haptic.tap();
+        else haptic.success();
+        pop();
+        onPress();
+      }}
       hitSlop={10}
       accessibilityRole="checkbox"
       accessibilityState={{ checked: !!done }}
-      style={{
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        borderWidth: 2,
-        borderColor: done ? colors.good : colors.faint,
-        backgroundColor: done ? colors.good : 'transparent',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
+      accessibilityLabel={done ? 'Mark as not solved' : 'Mark as solved'}
     >
-      {done ? <Text style={{ color: '#fff', fontWeight: '900' }}>✓</Text> : null}
+      <Animated.View style={{ transform: [{ scale }] }}>
+        {done ? (
+          <LinearGradient
+            colors={gradients.good}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[s.check, { borderWidth: 0, boxShadow: '0 0 14px -2px rgba(44,214,123,0.7)' }]}
+          >
+            <Ionicons name="checkmark" size={17} color="#04130B" />
+          </LinearGradient>
+        ) : (
+          <View style={s.check} />
+        )}
+      </Animated.View>
     </Pressable>
   );
 }
@@ -247,15 +298,16 @@ export function Heatmap({ calendar, weeks = 18 }: { calendar: Record<string, num
 }
 
 export const s = StyleSheet.create({
-  title: { color: colors.text, fontSize: 30, fontWeight: '800', letterSpacing: -0.5 },
-  subtitle: { color: colors.muted, fontSize: 14, marginBottom: 2 },
-  section: { color: colors.muted, fontSize: 12, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginTop: 6 },
-  card: { backgroundColor: colors.card, borderRadius: radius, borderWidth: 1, borderColor: colors.border, padding: 16, gap: 10 },
-  btn: { borderRadius: 12, paddingVertical: 13, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center' },
-  btnText: { fontWeight: '700', fontSize: 15 },
-  chip: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.cardHi },
+  title: { color: colors.text, fontSize: 30, fontFamily: fonts.bold, letterSpacing: -0.9 },
+  subtitle: { color: colors.muted, fontSize: 13, marginBottom: 2 },
+  section: { color: 'rgba(245,243,255,0.55)', fontSize: 11, fontFamily: fonts.semibold, letterSpacing: 1.6, textTransform: 'uppercase', marginTop: 6, marginLeft: 2 },
+  card: { padding: 16, gap: 10 },
+  btn: { borderRadius: 14, paddingVertical: 13, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center' },
+  btnText: { fontFamily: fonts.bold, fontSize: 14.5 },
+  chip: { paddingVertical: 7, paddingHorizontal: 13, borderRadius: 999, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.cardHi },
   chipText: { color: colors.text, fontSize: 13, fontWeight: '600' },
-  badge: { fontSize: 12, fontWeight: '700', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
+  badge: { fontSize: 11, fontWeight: '700', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, borderWidth: 1, overflow: 'hidden' },
+  check: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.38)', alignItems: 'center', justifyContent: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
   rowTitle: { color: colors.text, fontSize: 15, fontWeight: '600' },
   meta: { color: colors.muted, fontSize: 12 },
@@ -264,6 +316,6 @@ export const s = StyleSheet.create({
   stepBtn: { width: 40, height: 40, borderRadius: 10, backgroundColor: colors.cardHi, alignItems: 'center', justifyContent: 'center' },
   stepTxt: { color: colors.text, fontSize: 20, fontWeight: '700' },
   stepVal: { color: colors.text, fontSize: 20, fontWeight: '700', width: 38, textAlign: 'center', fontVariant: ['tabular-nums'] },
-  bigTime: { color: colors.accent, fontSize: 40, fontWeight: '800', textAlign: 'center', fontVariant: ['tabular-nums'] },
-  divider: { height: 1, backgroundColor: colors.border },
+  bigTime: { color: colors.accent, fontSize: 44, fontFamily: fonts.light, letterSpacing: -2, textAlign: 'center', fontVariant: ['tabular-nums'] },
+  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)' },
 });
