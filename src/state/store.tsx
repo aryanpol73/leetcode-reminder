@@ -58,6 +58,8 @@ interface Store {
   autoPlan: (o: AutoPlanOptions) => Promise<number>;
   updatePlan: (id: string, patch: Partial<PlanItem>) => void;
   removePlan: (id: string) => void;
+  removeMany: (ids: string[]) => void;
+  clearPlan: () => void;
   clearDone: () => void;
   toggleDone: (id: string) => void;
   upsertReminder: (r: Omit<Reminder, 'id'> & { id?: string }) => void;
@@ -204,6 +206,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       updatePlan: (id, patch) =>
         setState((s) => ({ ...s, plan: s.plan.map((x) => (x.id === id ? { ...x, ...patch } : x)) })),
       removePlan: (id) => setState((s) => ({ ...s, plan: s.plan.filter((x) => x.id !== id) })),
+      removeMany: (ids) => setState((s) => ({ ...s, plan: s.plan.filter((x) => !ids.includes(x.id)) })),
+      clearPlan: () => setState((s) => ({ ...s, plan: [] })),
       clearDone: () => setState((s) => ({ ...s, plan: s.plan.filter((x) => x.status !== 'done') })),
       toggleDone: (id) =>
         setState((s) => ({

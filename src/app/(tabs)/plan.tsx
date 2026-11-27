@@ -1,7 +1,8 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 import { Button, Card, Check, Chip, ProblemRow, Screen, SectionLabel, Stepper, s } from '../../components/ui';
+import { confirmAction } from '../../lib/confirm';
 import { addDays, dayKey, friendlyDay } from '../../lib/dates';
 import { POPULAR_TAGS } from '../../lib/leetcode';
 import type { Difficulty, PlanItem } from '../../lib/types';
@@ -9,7 +10,7 @@ import { useStore } from '../../state/store';
 import { colors } from '../../theme';
 
 export default function Plan() {
-  const { state, toggleDone, removePlan, updatePlan, clearDone, autoPlan } = useStore();
+  const { state, toggleDone, removePlan, removeMany, clearPlan, updatePlan, clearDone, autoPlan } = useStore();
   const [showAuto, setShowAuto] = useState(false);
   const today = dayKey();
 
@@ -26,13 +27,18 @@ export default function Plan() {
   }, [state.plan, today]);
   const done = state.plan.filter((p) => p.status === 'done').sort((a, b) => (b.doneAt ?? 0) - (a.doneAt ?? 0));
 
-  const itemActions = (p: PlanItem) =>
-    Alert.alert(`${p.frontendId}. ${p.title}`, undefined, [
-      { text: 'Move to today', onPress: () => updatePlan(p.id, { date: today }) },
-      { text: 'Push to tomorrow', onPress: () => updatePlan(p.id, { date: dayKey(addDays(new Date(), 1)) }) },
-      { text: 'Remove', style: 'destructive', onPress: () => removePlan(p.id) },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+  const [openId, setOpenId] = useState<string>();
+  const todoCount = state.plan.filter((p) => p.status === 'todo').length;
+  const tomorrow = dayKey(addDays(new Date(), 1));
+
+  const clearGroup = async (label: string, items: PlanItem[]) => {
+    const ok = await confirmAction(`Clear ${label.toLowerCase()}?`, `Removes ${items.length} problem${items.length > 1 ? 's' : ''} from your plan.`, 'Clear');
+    if (ok) removeMany(items.map((p) => p.id));
+  };
+  const deleteWholePlan = async () => {
+    const ok = await confirmAction('Delete your entire plan?', `Removes all ${state.plan.length} problems (to-do and done) and their alarms. This can't be undone.`, 'Delete plan');
+    if (ok) clearPlan();
+  };
 
   return (
     <Screen title="Plan" subtitle={`${state.plan.filter((p) => p.status === 'todo').length} to solve · ${done.length} done`}>
@@ -58,9 +64,14 @@ export default function Plan() {
 
       {groups.map(([label, items]) => (
         <View key={label} style={{ gap: 8 }}>
-          <SectionLabel>
-            {label} <Text style={{ color: label === 'Overdue' ? colors.danger : colors.faint }}>· {items.length}</Text>
-          </SectionLabel>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <SectionLabel>
+              {label} <Text style={{ color: label === 'Overdue' ? colors.danger : colors.faint }}>· {items.length}</Text>
+            </SectionLabel>
+            <Pressable onPress={() => clearGroup(label, items)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Clear ${label}`}>
+              <Text style={[s.meta, { color: colors.danger }]}>Clear day</Text>
+            </Pressable>
+          </View>
           <Card>
             {items.map((p, i) => (
               <View key={p.id}>
@@ -70,13 +81,32 @@ export default function Plan() {
                   meta={[p.time ? `⏰ ${p.time}` : '', p.note ?? ''].filter(Boolean).join(' · ') || undefined}
                   right={
                     <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
-                      <Text onPress={() => itemActions(p)} style={{ color: colors.muted, fontSize: 20, paddingHorizontal: 4 }}>
-                        ⋯
-                      </Text>
+                      <Pressable
+                        onPress={() => setOpenId(openId === p.id ? undefined : p.id)}
+                        hitSlop={10}
+                        accessibilityRole="button"
+                        accessibilityLabel={`More actions for ${p.title}`}
+                        style={{ paddingHorizontal: 6, paddingVertical: 2 }}
+                      >
+                        <Text style={{ color: openId === p.id ? colors.accent : colors.muted, fontSize: 22 }}>⋯</Text>
+                      </Pressable>
                       <Check onPress={() => toggleDone(p.id)} />
                     </View>
                   }
                 />
+                {openId === p.id ? (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 10 }}>
+                    {p.date !== today ? <Chip label="Move to today" onPress={() => (updatePlan(p.id, { date: today }), setOpenId(undefined))} /> : null}
+                    {p.date !== tomorrow ? <Chip label="Push to tomorrow" onPress={() => (updatePlan(p.id, { date: tomorrow }), setOpenId(undefined))} /> : null}
+                    <Pressable
+                      onPress={() => (removePlan(p.id), setOpenId(undefined))}
+                      accessibilityRole="button"
+                      style={[s.chip, { borderColor: colors.danger, backgroundColor: 'rgba(255,94,98,0.14)' }]}
+                    >
+                      <Text style={[s.chipText, { color: colors.danger }]}>Delete</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
               </View>
             ))}
           </Card>
@@ -101,6 +131,8 @@ export default function Plan() {
           </Card>
         </View>
       ) : null}
+
+      {state.plan.length ? <Button kind="danger" label={`Delete entire plan (${todoCount} to do)`} onPress={deleteWholePlan} /> : null}
     </Screen>
   );
 }

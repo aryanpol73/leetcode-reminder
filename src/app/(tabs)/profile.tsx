@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Alert, Image, Linking, Text, TextInput, View } from 'react-native';
+import { confirmAction } from '../../lib/confirm';
 import { Bar, Button, Card, Heatmap, Screen, SectionLabel, s } from '../../components/ui';
 import { DEFAULT_FALLBACK, profileUrl } from '../../lib/leetcode';
 import { useStore } from '../../state/store';
@@ -148,10 +149,7 @@ export default function ProfileScreen() {
         kind="danger"
         label="Disconnect account"
         onPress={() =>
-          Alert.alert('Disconnect?', 'Your plan and alarms stay on this phone.', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Disconnect', style: 'destructive', onPress: disconnect },
-          ])
+          confirmAction('Disconnect?', 'Your plan and alarms stay on this device.', 'Disconnect').then((ok) => ok && disconnect())
         }
       />
     </Screen>
