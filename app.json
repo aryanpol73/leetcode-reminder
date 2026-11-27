@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#0F0C1D",
+    "backgroundColor": "#0B0820",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.aryanpol.leetping"
@@ -35,7 +35,7 @@
       "name": "LeetPing",
       "shortName": "LeetPing",
       "themeColor": "#15102A",
-      "backgroundColor": "#0F0C1D"
+      "backgroundColor": "#0B0820"
     },
     "plugins": [
       "expo-router",
@@ -53,7 +53,7 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 180,
           "resizeMode": "contain",
-          "backgroundColor": "#0F0C1D"
+          "backgroundColor": "#0B0820"
         }
       ],
       "expo-font"
