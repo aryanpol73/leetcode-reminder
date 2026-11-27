@@ -1,6 +1,8 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { buildQueue } from './schedule';
+import { addDays } from './dates';
+import { buildQueue, solvedToday } from './schedule';
+import { screenAlarm, type ScheduledScreenAlarm } from './screenAlarm';
 import type { AppState } from './types';
 import { requestWebPermission, scheduleWeb, testWebAlarm, webPermission } from './webAlarms';
 
@@ -97,12 +99,29 @@ export function rescheduleAll(state: AppState): Promise<number> {
   }
   const run = async () => {
     const perms = await getPermissionInfo();
+    const queue = buildQueue(state);
+    const useScreenAlarm = !!(screenAlarm && state.screenAlarms && perms.notifications);
+    const exact = state.alarmMode && perms.exactAlarms;
+    const screenQueue: ScheduledScreenAlarm[] = useScreenAlarm
+      ? queue.flatMap((a) => a.practice ? [{
+          ...a.practice,
+          id: `${a.at.getTime()}:${a.data.reminderId ?? a.data.planId}`,
+          at: a.at.getTime(),
+        }] : [])
+      : [];
+    const tomorrow = addDays(new Date(), 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    const solvedUntil = solvedToday(state) ? tomorrow.getTime() : 0;
+    const pendingPlanIds = state.plan.filter((item) => item.status === 'todo').map((item) => item.id);
+    const screenCount = await screenAlarm?.setSchedule(
+      JSON.stringify({ alarms: screenQueue, pendingPlanIds, solvedUntil }),
+      useScreenAlarm, !!state.screenAlarmsOverApps, exact,
+    );
     if (!perms.notifications) return 0;
     await setupChannelsAndActions();
     await Notifications.cancelAllScheduledNotificationsAsync();
-    const queue = buildQueue(state);
-    const delivery = state.alarmMode && perms.exactAlarms ? 'alarmClock' : 'bestEffort';
-    for (const item of queue) {
+    const delivery = exact ? 'alarmClock' : 'bestEffort';
+    for (const item of queue.filter((a) => !useScreenAlarm || !a.practice)) {
       await Notifications.scheduleNotificationAsync({
         content: {
           title: item.title,
@@ -120,7 +139,7 @@ export function rescheduleAll(state: AppState): Promise<number> {
         },
       });
     }
-    return queue.length;
+    return queue.length - screenQueue.length + (screenCount ?? 0);
   };
   // Serialise calls so two quick edits can't interleave cancel/schedule.
   rescheduling = (rescheduling ?? Promise.resolve(0)).catch(() => 0).then(run);

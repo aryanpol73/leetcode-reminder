@@ -1,8 +1,9 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Linking, Platform, Pressable, Switch, Text, View } from 'react-native';
+import { Alert, AppState, Linking, Platform, Pressable, Switch, Text, View } from 'react-native';
 import { Button, Card, Screen, SectionLabel, s } from '../../components/ui';
-import { DAY_SHORT, formatTime } from '../../lib/dates';
+import { practiceAlarm } from '../../lib/alarmMessages';
+import { DAY_SHORT, dayKey, formatTime } from '../../lib/dates';
 import {
   getPermissionInfo,
   isSupported,
@@ -11,6 +12,7 @@ import {
   sendTestAlarm,
   type PermissionInfo,
 } from '../../lib/notifications';
+import { addScreenAlarm, screenAlarm } from '../../lib/screenAlarm';
 import type { Reminder } from '../../lib/types';
 import { getPushStatus } from '../../lib/webAlarms';
 import { useStore } from '../../state/store';
@@ -19,12 +21,20 @@ import { colors } from '../../theme';
 export default function Alarms() {
   const { state, upsertReminder, setSetting, queued, reschedule } = useStore();
   const [perms, setPerms] = useState<PermissionInfo>();
+  const [screenPermissions, setScreenPermissions] = useState(() => screenAlarm?.permissions());
   const pushStatus = getPushStatus();
 
   const refresh = useCallback(() => {
     getPermissionInfo().then(setPerms).catch(() => {});
+    setScreenPermissions(screenAlarm?.permissions());
   }, []);
-  useFocusEffect(refresh);
+  useFocusEffect(useCallback(() => {
+    refresh();
+    const sub = AppState.addEventListener('change', (status) => {
+      if (status === 'active') refresh();
+    });
+    return () => sub.remove();
+  }, [refresh]));
 
   const enable = async () => {
     const ok = await requestNotificationPermission();
@@ -46,8 +56,20 @@ export default function Alarms() {
 
   const test = async () => {
     if (!perms?.notifications) return enable();
-    await sendTestAlarm(5);
-    Alert.alert('Test alarm in 5 seconds', 'Lock your phone or leave the app to see it as a real alarm.');
+    try {
+      if (screenAlarm && state.screenAlarms) {
+        await reschedule();
+        const now = new Date();
+        const problem = state.plan.find((item) => item.status === 'todo' && item.date <= dayKey(now));
+        const at = now.getTime() + 5000;
+        await addScreenAlarm(practiceAlarm(state, new Date(at), 'streak', problem, now), at, `test:${at}`);
+      } else {
+        await sendTestAlarm(5);
+      }
+      Alert.alert('Test alarm scheduled', 'Lock your phone or leave LeetPing. Android may delay the test if exact alarms are off.');
+    } catch {
+      Alert.alert('Couldn’t schedule the test alarm', 'Check your alarm permissions and try again.');
+    }
   };
 
   return (
@@ -106,7 +128,35 @@ export default function Alarms() {
             />
           </>
         ) : null}
+        {screenAlarm ? (
+          <>
+            <View style={s.divider} />
+            <Row
+              title="Silent screen alarms"
+              sub="Show your practice reminder on screen with sound and vibration off."
+              value={!!state.screenAlarms}
+              onChange={(v) => setSetting('screenAlarms', v)}
+            />
+            {state.screenAlarms ? (
+              <>
+                {!screenPermissions?.fullScreen ? (
+                  <Button kind="ghost" label="Allow full-screen alarms" onPress={() => screenAlarm?.openSettings('fullScreen')} />
+                ) : null}
+                <Row
+                  title="Show over other apps"
+                  sub="Show the full reminder even when you’re using another app."
+                  value={!!state.screenAlarmsOverApps}
+                  onChange={(v) => setSetting('screenAlarmsOverApps', v)}
+                />
+                {state.screenAlarmsOverApps && !screenPermissions?.overlay ? (
+                  <Button kind="ghost" label="Allow display over apps" onPress={() => screenAlarm?.openSettings('overlay')} />
+                ) : null}
+              </>
+            ) : null}
+          </>
+        ) : null}
       </Card>
+      <Button kind="ghost" label="Preview alarm screen" onPress={() => router.push('/alarm-screen')} />
       <Button kind="ghost" label="🔔 Send a test alarm" onPress={test} />
       <Text style={[s.meta, { textAlign: 'center' }]}>
         Each alarm names the problem planned for that day, so you know exactly what to open.

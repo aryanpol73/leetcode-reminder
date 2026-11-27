@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dayKey } from '../src/lib/dates';
+import { practiceAlarm } from '../src/lib/alarmMessages';
+import { addDays, dayKey } from '../src/lib/dates';
 import { autoComplete, buildQueue, MAX_QUEUED, solvedToday } from '../src/lib/schedule';
 import type { AppState, PlanItem, Profile } from '../src/lib/types';
 
@@ -123,4 +124,39 @@ test('solvedToday uses the local calendar day', () => {
   const yesterday = Math.floor(new Date(2026, 10, 22, 23, 0).getTime() / 1000);
   assert.equal(solvedToday({ profile: profileWith([yesterday]) }, NOW), false);
   assert.equal(solvedToday({ profile: undefined }, NOW), false);
+});
+
+test('practice alarm copy rotates through five messages for each activity level', () => {
+  const first = profileWith([]);
+  const returning = { ...first, solved: { ...first.solved, all: 1 } };
+  const yesterday = addDays(NOW, -1);
+  const regular = profileWith([yesterday.getTime() / 1000]);
+  const allHeadlines = new Set<string>();
+  for (const profile of [first, returning, regular]) {
+    const headlines = Array.from({ length: 5 }, (_, i) =>
+      practiceAlarm({ profile }, addDays(NOW, i), 'evening', undefined, NOW).headline,
+    );
+    assert.equal(new Set(headlines).size, 5);
+    const today = practiceAlarm({ profile }, NOW, 'evening', undefined, NOW);
+    assert.equal(today.headline, headlines[0]);
+    assert.equal(today.streak, profile === regular ? regular.streak : undefined);
+    headlines.forEach((headline) => allHeadlines.add(headline));
+  }
+  assert.equal(allHeadlines.size, 15);
+});
+
+test('a practice alarm uses the problem list when only the LeetCode daily is available', () => {
+  const reminders = [{ id: 's', label: 'Streak', hour: 21, minute: 30, days: ALL, enabled: true, kind: 'streak' as const }];
+  const [alarm] = buildQueue(base({ reminders, daily: { date: dayKey(NOW), problem: item({}) } }), NOW);
+  assert.equal(alarm.data.slug, null);
+  assert.equal(alarm.data.url, 'https://leetcode.com/problemset/');
+  assert.equal(alarm.practice?.problem, undefined);
+  assert.ok(alarm.practice?.headline);
+});
+
+test('a per-problem practice alarm carries the exact question and note', () => {
+  const plan = item({ time: '18:45', note: 'Try a hash map' });
+  const [alarm] = buildQueue(base({ plan: [plan] }), NOW);
+  assert.equal(alarm.practice?.problem?.slug, plan.slug);
+  assert.equal(alarm.practice?.note, plan.note);
 });

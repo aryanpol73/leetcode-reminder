@@ -3,6 +3,7 @@
  * No Expo imports, so it can be unit-tested in Node (see tests/schedule.test.ts).
  */
 import { addDays, dayKey, parseTime } from './dates';
+import { practiceAlarm, type PracticeAlarm } from './alarmMessages';
 import type { AppState, PlanItem } from './types';
 
 /** How far ahead one-off alarms are queued (re-planned every sync / app open / background run). */
@@ -11,21 +12,12 @@ export const HORIZON_DAYS = 14;
 export const MAX_QUEUED = 60;
 export const CONTEST_LEAD_MIN = 30;
 
-export const NUDGES = [
-  'One problem a day keeps the rejection emails away.',
-  'Your future interviewer is already typing. Open LeetCode.',
-  'Two pointers, one goal: solve something now.',
-  'Streaks are built on boring Tuesdays. Go solve one.',
-  'Ten minutes of thinking beats an hour of scrolling.',
-  'Dynamic-program yourself into a better habit.',
-  'O(1) effort to start. Just open the problem.',
-];
-
 export interface PlannedAlarm {
   at: Date;
   title: string;
   body: string;
   data: Record<string, string | null>;
+  practice?: PracticeAlarm;
 }
 
 export function solvedToday(state: Pick<AppState, 'profile'>, now = new Date()): boolean {
@@ -62,7 +54,6 @@ export function buildQueue(state: AppState, now = new Date()): PlannedAlarm[] {
     const dayItems = [...overdue, ...planned];
     const summary = planSummary(dayItems);
     const firstTodo = dayItems.find((p) => p.status === 'todo');
-    const daily = d === 0 && state.daily?.date === key ? state.daily.problem : undefined;
 
     for (const r of state.reminders) {
       if (!r.enabled || !r.days.includes(day.getDay())) continue;
@@ -70,16 +61,17 @@ export function buildQueue(state: AppState, now = new Date()): PlannedAlarm[] {
       if (at <= now) continue;
       if (r.kind === 'streak' && d === 0 && doneToday) continue;
 
-      const body =
-        summary ??
-        (daily
-          ? `Daily challenge: #${daily.frontendId} ${daily.title} (${daily.difficulty})`
-          : NUDGES[(day.getDate() + r.hour) % NUDGES.length]);
+      const practice = practiceAlarm(state, at, r.id, firstTodo, now);
+      const body = summary ?? `${practice.headline} ${practice.message}`;
       const title =
         r.kind === 'streak'
           ? `🔥 Save your streak${state.profile?.streak ? ` (${state.profile.streak} days)` : ''}`
           : `⏰ ${r.label || 'LeetCode time'}`;
-      queue.push({ at, title, body, data: { slug: firstTodo?.slug ?? daily?.slug ?? null, reminderId: r.id } });
+      queue.push({
+        at, title, body,
+        data: { slug: firstTodo?.slug ?? null, reminderId: r.id, ...(firstTodo ? {} : { url: 'https://leetcode.com/problemset/' }) },
+        practice,
+      });
     }
 
     for (const p of planned) {
@@ -92,6 +84,7 @@ export function buildQueue(state: AppState, now = new Date()): PlannedAlarm[] {
         title: `⏰ Time to solve #${p.frontendId}`,
         body: `${p.title} · ${p.difficulty}${p.note ? ` · ${p.note}` : ''}`,
         data: { slug: p.slug, planId: p.id },
+        practice: practiceAlarm(state, at, p.id, p, now),
       });
     }
   }

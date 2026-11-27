@@ -73,6 +73,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="add-problem" options={{ presentation: 'modal', headerShown: true, title: 'Add to plan' }} />
           <Stack.Screen name="reminder" options={{ presentation: 'modal', headerShown: true, title: 'Alarm' }} />
+          <Stack.Screen name="alarm-screen" options={{ presentation: 'fullScreenModal', animation: 'fade', gestureEnabled: false }} />
         </Stack>
       </StoreProvider>
     </SafeAreaProvider>
