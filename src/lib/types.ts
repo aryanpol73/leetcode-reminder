@@ -98,6 +98,9 @@ export interface AppState {
   reminders: Reminder[];
   /** Use Android exact "alarm clock" delivery when permitted */
   alarmMode: boolean;
+  /** Silent full-screen practice reminders on Android. */
+  screenAlarms?: boolean;
+  screenAlarmsOverApps?: boolean;
   /** Alarm 30 minutes before each upcoming LeetCode contest */
   contestAlarms: boolean;
   /** REST fallback (alfa-leetcode-api compatible) used when LeetCode GraphQL is unreachable */

@@ -64,7 +64,7 @@ interface Store {
   toggleDone: (id: string) => void;
   upsertReminder: (r: Omit<Reminder, 'id'> & { id?: string }) => void;
   removeReminder: (id: string) => void;
-  setSetting: <K extends 'alarmMode' | 'contestAlarms' | 'fallbackApi'>(k: K, v: AppState[K]) => void;
+  setSetting: <K extends 'alarmMode' | 'contestAlarms' | 'fallbackApi' | 'screenAlarms' | 'screenAlarmsOverApps'>(k: K, v: AppState[K]) => void;
   reschedule: () => Promise<void>;
 }
 
