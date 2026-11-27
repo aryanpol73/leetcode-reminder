@@ -44,7 +44,7 @@ export default function Today() {
 
   return (
     <Screen
-      subtitle={`${weekday} · ${greeting(now)}${name ? `, ${name}` : ''}`}
+      subtitle={`${greeting(now)}${name ? `, ${name}` : ''} · ${weekday}`}
       title="Today"
       right={
         <Glass radius={22} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
@@ -69,11 +69,15 @@ export default function Today() {
             </Text>
           </View>
         </View>
+        {/* The ring tracks today's *plan*; "solved today" (streak) can come from any accepted problem. */}
         <ProgressRing progress={total ? doneToday.length / total : 0} size={82} stroke={6}>
-          <Text style={{ fontFamily: fonts.bold, fontSize: 17, color: colors.text }}>
-            {doneToday.length}/{total}
+          <Text
+            style={{ fontFamily: fonts.bold, fontSize: 17, color: colors.text }}
+            accessibilityLabel={total ? `${doneToday.length} of ${total} planned problems done` : 'No problems planned today'}
+          >
+            {total ? `${doneToday.length}/${total}` : '—'}
           </Text>
-          <Text style={{ fontSize: 9.5, color: colors.muted, marginTop: 1 }}>solved</Text>
+          <Text style={{ fontSize: 9.5, color: colors.muted, marginTop: 1 }}>{total ? 'planned' : 'no plan'}</Text>
         </ProgressRing>
       </Glass>
 
@@ -87,7 +91,11 @@ export default function Today() {
       ) : solved ? (
         <Glass style={{ padding: 14, flexDirection: 'row', gap: 10, alignItems: 'center', borderColor: 'rgba(44,214,123,0.45)' }}>
           <Ionicons name="shield-checkmark" size={20} color={colors.good} />
-          <Text style={[s.body, { flex: 1, fontSize: 14 }]}>Solved today. The streak saver stays quiet tonight.</Text>
+          <Text style={[s.body, { flex: 1, fontSize: 14 }]}>
+            {todo.length === 0
+              ? 'Solved today. The streak saver stays quiet tonight.'
+              : `You solved a problem on LeetCode today, so your streak is safe. ${todo.length} planned ${todo.length === 1 ? 'problem is' : 'problems are'} still open.`}
+          </Text>
         </Glass>
       ) : null}
       {syncError ? (

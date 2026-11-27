@@ -57,3 +57,11 @@ export const diffColor: Record<Difficulty, string> = {
 };
 
 export const radius = 22;
+
+/** Floating tab bar geometry, shared by the tab layout and screen bottom padding. */
+export const tabBar = {
+  height: 66,
+  /** Gap between the bar and the bottom safe-area edge. */
+  gap: 10,
+  radius: 32,
+};

@@ -2,15 +2,18 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState } from 'react';
 import { ActivityIndicator, Animated, Linking, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatTime } from '../lib/dates';
 import { problemUrl } from '../lib/leetcode';
 import type { Difficulty, ProblemRef } from '../lib/types';
-import { colors, diffColor, fonts, gradients } from '../theme';
-import { Glass, haptic, usePressScale } from './glass';
+import { colors, diffColor, fonts, gradients, tabBar } from '../theme';
+import { AuroraBackground, Glass, haptic, usePressScale } from './glass';
 
-/** Space kept clear at the bottom of tab screens for the floating tab bar. */
-export const TAB_BAR_CLEARANCE = 120;
+/** Bottom space a tab screen keeps clear so the floating tab bar never covers content. */
+export function useTabBarClearance() {
+  const insets = useSafeAreaInsets();
+  return tabBar.height + tabBar.gap + insets.bottom + 20;
+}
 
 export function Screen({
   title,
@@ -27,26 +30,38 @@ export function Screen({
   refreshing?: boolean;
   onRefresh?: () => void;
 }) {
+  const clearance = useTabBarClearance();
+  // Each tab scene paints its own opaque aurora base. On web, inactive tab scenes stay mounted
+  // and stacked behind the focused one, so a transparent scene would let them show through.
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }} edges={['top']}>
-      <ScrollView
-        contentContainerStyle={{ padding: 16, paddingBottom: TAB_BAR_CLEARANCE, gap: 14 }}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={
-          onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={colors.accent} colors={[colors.accent]} /> : undefined
-        }
-      >
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 4 }}>
-          <View style={{ flex: 1 }}>
-            {subtitle ? <Text style={s.subtitle}>{subtitle}</Text> : null}
-            <Text style={s.title}>{title}</Text>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <AuroraBackground />
+      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+        <ScrollView
+          contentContainerStyle={{ padding: 16, paddingBottom: clearance, gap: 14 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={colors.accent} colors={[colors.accent]} /> : undefined
+          }
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={s.title} numberOfLines={1}>
+                {title}
+              </Text>
+              {subtitle ? (
+                <Text style={s.subtitle} numberOfLines={2}>
+                  {subtitle}
+                </Text>
+              ) : null}
+            </View>
+            {right}
           </View>
-          {right}
-        </View>
-        {children}
-      </ScrollView>
-    </SafeAreaView>
+          {children}
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -298,8 +313,8 @@ export function Heatmap({ calendar, weeks = 18 }: { calendar: Record<string, num
 }
 
 export const s = StyleSheet.create({
-  title: { color: colors.text, fontSize: 30, fontFamily: fonts.bold, letterSpacing: -0.9 },
-  subtitle: { color: colors.muted, fontSize: 13, marginBottom: 2 },
+  title: { color: colors.text, fontSize: 30, lineHeight: 38, fontFamily: fonts.bold, letterSpacing: -0.9 },
+  subtitle: { color: colors.muted, fontSize: 13, lineHeight: 18 },
   section: { color: 'rgba(245,243,255,0.55)', fontSize: 11, fontFamily: fonts.semibold, letterSpacing: 1.6, textTransform: 'uppercase', marginTop: 6, marginLeft: 2 },
   card: { padding: 16, gap: 10 },
   btn: { borderRadius: 14, paddingVertical: 13, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center' },
