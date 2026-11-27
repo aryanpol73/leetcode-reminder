@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { practiceAlarm } from '../src/lib/alarmMessages';
 import { addDays, dayKey } from '../src/lib/dates';
+import { findAutoPlanProblems, knownSolved, pickAutoPlanProblems, rememberSolved } from '../src/lib/planning';
 import { autoComplete, buildQueue, MAX_QUEUED, solvedToday } from '../src/lib/schedule';
 import type { AppState, PlanItem, Profile } from '../src/lib/types';
 
@@ -159,4 +160,31 @@ test('a per-problem practice alarm carries the exact question and note', () => {
   const [alarm] = buildQueue(base({ plan: [plan] }), NOW);
   assert.equal(alarm.practice?.problem?.slug, plan.slug);
   assert.equal(alarm.practice?.note, plan.note);
+});
+
+test('remembered solves survive later syncs and are scoped to the connected account', () => {
+  const profile = profileWith([NOW.getTime() / 1000]);
+  const first = base({ username: 'U', profile });
+  const solvedQuestions = rememberSolved(first, ['lru-cache']);
+  const later = { username: 'u', profile: profileWith([]), solvedQuestions };
+  assert.deepEqual([...knownSolved(later)].sort(), ['lru-cache', 'two-sum']);
+  assert.deepEqual([...knownSolved({ ...later, username: 'other' })], []);
+});
+
+test('auto-plan looks beyond solved questions and picks distinct free problems in acceptance order', async () => {
+  const state = base({ plan: [item({ slug: 'in-plan' })], solvedQuestions: { local: ['two-sum', 'lru-cache'] } });
+  const pages = [
+    [item({ slug: 'two-sum' }), item({ slug: 'lru-cache' }), item({ slug: 'in-plan' })],
+    [item({ slug: 'paid', paidOnly: true }), item({ slug: 'fresh-a', acRate: 60 }), item({ slug: 'fresh-b', acRate: 80 })],
+  ];
+  const offsets: number[] = [];
+  const options = { tags: ['array'], difficulty: 'Easy' as const };
+  const candidates = await findAutoPlanProblems(async (filters) => {
+    assert.deepEqual(filters.tags, options.tags);
+    assert.equal(filters.difficulty, 'Easy');
+    offsets.push(filters.skip!);
+    return { total: 6, problems: pages[filters.skip! / 3] };
+  }, options, 2, () => state);
+  assert.deepEqual(offsets, [0, 3]);
+  assert.deepEqual(pickAutoPlanProblems([...candidates, ...candidates], state, 3).map((p) => p.slug), ['fresh-b', 'fresh-a']);
 });

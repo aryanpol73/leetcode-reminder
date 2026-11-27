@@ -95,6 +95,8 @@ export interface AppState {
   daily?: DailyChallenge;
   contests: Contest[];
   plan: PlanItem[];
+  /** Accepted or manually recorded problem slugs, grouped by LeetCode account. */
+  solvedQuestions?: Record<string, string[]>;
   reminders: Reminder[];
   /** Use Android exact "alarm clock" delivery when permitted */
   alarmMode: boolean;

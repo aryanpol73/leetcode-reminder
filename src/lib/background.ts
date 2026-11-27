@@ -11,6 +11,7 @@ import * as TaskManager from 'expo-task-manager';
 import { Platform } from 'react-native';
 import { fetchDaily, fetchProfile, setFallbackApi } from './leetcode';
 import { rescheduleAll } from './notifications';
+import { rememberSolved } from './planning';
 import { autoComplete } from './schedule';
 import type { AppState } from './types';
 
@@ -33,6 +34,7 @@ if (Platform.OS !== 'web') {
       const next: AppState = {
         ...state,
         profile: profile ?? state.profile,
+        solvedQuestions: rememberSolved(state, profile?.recent.map((submission) => submission.slug)),
         daily: daily ?? state.daily,
         plan: profile ? autoComplete(state.plan, profile.recent) : state.plan,
         lastSync: profile ? Date.now() : state.lastSync,
