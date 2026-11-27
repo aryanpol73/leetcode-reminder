@@ -11,7 +11,9 @@
  */
 import type { Contest, ContestInfo, DailyChallenge, Difficulty, Profile, ProblemRef, SkillStat } from './types';
 
-const ENDPOINT = 'https://leetcode.com/graphql';
+// In the browser (PWA) LeetCode blocks cross-origin calls, so go through our /api/leetcode proxy.
+const IS_BROWSER = typeof document !== 'undefined';
+const ENDPOINT = IS_BROWSER ? '/api/leetcode' : 'https://leetcode.com/graphql';
 export const DEFAULT_FALLBACK = 'https://alfa-leetcode-api.onrender.com';
 
 let fallbackBase = DEFAULT_FALLBACK;

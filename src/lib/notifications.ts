@@ -2,6 +2,9 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { buildQueue } from './schedule';
 import type { AppState } from './types';
+import { requestWebPermission, scheduleWeb, testWebAlarm, webPermission } from './webAlarms';
+
+const isWeb = Platform.OS === 'web';
 
 export { solvedToday } from './schedule';
 
@@ -10,6 +13,7 @@ export const CATEGORY_ID = 'leetping_reminder';
 export const ACTION_SOLVE = 'solve_now';
 export const ACTION_SNOOZE = 'snooze_10';
 
+/** Native notification APIs (iOS/Android). On web the PWA path in webAlarms.ts is used. */
 export const isSupported = Platform.OS !== 'web';
 
 export function configureForeground() {
@@ -53,7 +57,7 @@ export interface PermissionInfo {
 }
 
 export async function getPermissionInfo(): Promise<PermissionInfo> {
-  if (!isSupported) return { notifications: false, exactAlarms: false };
+  if (isWeb) return { notifications: webPermission(), exactAlarms: true };
   const n = await Notifications.getPermissionsAsync();
   const granted =
     n.granted || n.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
@@ -65,7 +69,7 @@ export async function getPermissionInfo(): Promise<PermissionInfo> {
 }
 
 export async function requestNotificationPermission(): Promise<boolean> {
-  if (!isSupported) return false;
+  if (isWeb) return requestWebPermission();
   await setupChannelsAndActions();
   const res = await Notifications.requestPermissionsAsync({
     ios: { allowAlert: true, allowSound: true, allowBadge: false },
@@ -86,7 +90,11 @@ let rescheduling: Promise<number> | null = null;
 
 /** Cancels everything we queued and queues the fresh plan. Returns how many alarms are queued. */
 export function rescheduleAll(state: AppState): Promise<number> {
-  if (!isSupported) return Promise.resolve(0);
+  if (isWeb) {
+    const now = new Date();
+    const recent = buildQueue(state, new Date(now.getTime() - 30 * 60_000)).filter((a) => a.at <= now);
+    return Promise.resolve(scheduleWeb(buildQueue(state, now), recent));
+  }
   const run = async () => {
     const perms = await getPermissionInfo();
     if (!perms.notifications) return 0;
@@ -137,6 +145,7 @@ export async function snooze(content: Notifications.NotificationContent, minutes
 }
 
 export async function sendTestAlarm(seconds = 5) {
+  if (isWeb) return testWebAlarm(seconds);
   await setupChannelsAndActions();
   await Notifications.scheduleNotificationAsync({
     content: {

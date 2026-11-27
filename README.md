@@ -6,7 +6,7 @@
 <p align="center"><b>Your LeetCode alarm clock.</b><br/>Plan which problems to solve, get loud phone alarms that name the exact problem, and keep your streak alive.</p>
 
 <p align="center">
-  React Native · Expo SDK 58 · TypeScript · Android &amp; iOS
+  React Native · Expo SDK 58 · TypeScript · Android, iOS &amp; installable PWA
 </p>
 
 ---
@@ -24,6 +24,7 @@
 
 | | |
 |---|---|
+| 📲 **Installable PWA** | Install on Android, iPhone, Windows or Mac from the browser. Web Push alarms ring even when the app is closed. |
 | ⏰ **Real alarms** | Max-importance Android channel (sound, long vibration, bypasses Do Not Disturb, lock-screen visible) plus *alarm-clock mode* for exact-minute delivery even in Doze. **Snooze 10 min** and **Solve now** buttons on every alarm. |
 | 🗓️ **Plan your problems** | Add problems by **number** (`42`), **name**, **slug** or **pasted link**, and filter by **topic** and **difficulty**. Schedule them for any of the next 14 days, with an optional per-problem alarm time and a note. Overdue items roll over to today. |
 | ✨ **Auto-plan** | Pick a topic (★ marks your weakest ones), difficulty, problems per day and number of days. LeetPing fills your plan with free problems you haven't solved, easiest first. |
@@ -64,6 +65,36 @@ LeetPing calls LeetCode's public GraphQL API (`https://leetcode.com/graphql`) st
 ```bash
 docker run -p 3000:3000 alfaarghya/alfa-leetcode-api:2.0.4
 ```
+
+## Install as a PWA (phone + desktop)
+
+LeetPing also ships as an installable web app with real push alarms:
+
+- **Android (Chrome/Edge)**: open the site and tap **Install app**.
+- **iPhone/iPad (iOS 16.4+)**: Safari → **Share → Add to Home Screen**, then open it from the home screen and allow notifications. iOS only allows web notifications for home-screen apps.
+- **Desktop (Chrome/Edge)**: use the install icon in the address bar.
+
+How alarms reach a **closed** PWA: the app uploads its next 14 days of alarms to `/api/push`. A scheduler calls `/api/dispatch` every minute, and the server sends each due alarm as a Web Push (VAPID). The service worker shows it with **Solve now** and **Snooze 10 min** buttons, and snooze works with the app closed too. While the app is open, in-page timers ring on time, sharing a notification tag with the push so you never get duplicates.
+
+### Deploy (free tier)
+
+1. **Upstash Redis**: create a free database at upstash.com and copy the REST URL and token.
+2. **VAPID keys**: `npm run vapid`
+3. **Vercel**: import the GitHub repo (it reads `vercel.json`: builds `expo export -p web`, serves `dist/`, runs `api/*.mjs`). Add these env vars:
+   `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (e.g. `mailto:you@example.com`), `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `CRON_SECRET` (any long random string).
+4. **Scheduler**: create a free [cron-job.org](https://cron-job.org) job hitting `https://YOUR-APP.vercel.app/api/dispatch?key=CRON_SECRET` **every minute**. Or use the included GitHub Action (`.github/workflows/dispatch-alarms.yml`, every ~5 min): set repo variable `LEETPING_URL` and secret `CRON_SECRET`.
+
+Without step 4, alarms still ring while the app is open or backgrounded. Alarms that came due while it was closed ring as soon as you reopen it (if under 30 minutes late).
+
+### Try the PWA locally
+
+```bash
+npm run pwa:local   # builds the web app and serves http://localhost:4173
+```
+
+This runs the real API functions with an in-memory Redis and throwaway VAPID keys, so push alarms work on localhost without any accounts.
+
+`/api/leetcode` is a small read-only proxy: browsers can't call LeetCode's GraphQL directly (CORS). Mutations and large bodies are rejected.
 
 ## Run it on your phone
 

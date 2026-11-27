@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#0E0E11",
+    "backgroundColor": "#0F0C1D",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.aryanpol.leetping"
@@ -15,7 +15,7 @@
     "android": {
       "package": "com.aryanpol.leetping",
       "adaptiveIcon": {
-        "backgroundColor": "#0E0E11",
+        "backgroundColor": "#15102A",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -29,7 +29,13 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "output": "single",
+      "bundler": "metro",
+      "name": "LeetPing",
+      "shortName": "LeetPing",
+      "themeColor": "#15102A",
+      "backgroundColor": "#0F0C1D"
     },
     "plugins": [
       "expo-router",
@@ -37,7 +43,7 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#FFA116"
+          "color": "#FFB020"
         }
       ],
       "expo-background-task",
@@ -47,7 +53,7 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 180,
           "resizeMode": "contain",
-          "backgroundColor": "#0E0E11"
+          "backgroundColor": "#0F0C1D"
         }
       ],
       "expo-font"

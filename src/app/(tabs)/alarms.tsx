@@ -12,12 +12,14 @@ import {
   type PermissionInfo,
 } from '../../lib/notifications';
 import type { Reminder } from '../../lib/types';
+import { getPushStatus } from '../../lib/webAlarms';
 import { useStore } from '../../state/store';
 import { colors } from '../../theme';
 
 export default function Alarms() {
   const { state, upsertReminder, setSetting, queued, reschedule } = useStore();
   const [perms, setPerms] = useState<PermissionInfo>();
+  const pushStatus = getPushStatus();
 
   const refresh = useCallback(() => {
     getPermissionInfo().then(setPerms).catch(() => {});
@@ -50,11 +52,22 @@ export default function Alarms() {
 
   return (
     <Screen title="Alarms" subtitle={`${queued} alarms queued for the next 2 weeks`}>
-      {!isSupported ? (
+      {!isSupported && perms?.notifications ? (
         <Card>
-          <Text style={s.body}>Alarms need the iOS or Android app. Open LeetPing in Expo Go or a phone build.</Text>
+          <Text style={[s.body, { fontWeight: '700' }]}>
+            {pushStatus === 'on' ? '📲 Push alarms on' : '📲 Web app alarms'}
+          </Text>
+          <Text style={s.meta}>
+            {pushStatus === 'on'
+              ? 'Alarms are delivered by push, so they ring even when LeetPing is closed.'
+              : 'Alarms ring while LeetPing is open or in the background. Push delivery for a closed app is not set up on this server yet.'}
+            {Platform.OS === 'web' && /iPhone|iPad/.test(navigator.userAgent) && !(navigator as any).standalone
+              ? '\n\nOn iPhone: tap Share → Add to Home Screen, then open LeetPing from the home screen to allow notifications.'
+              : ''}
+          </Text>
         </Card>
-      ) : perms && !perms.notifications ? (
+      ) : null}
+      {perms && !perms.notifications ? (
         <Card style={{ borderColor: colors.accent }}>
           <Text style={[s.body, { fontWeight: '700' }]}>🔕 Notifications are off</Text>
           <Text style={s.meta}>LeetPing can’t ring until you allow notifications.</Text>
