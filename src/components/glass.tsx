@@ -2,7 +2,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useState } from 'react';
+import { useIsFocused } from 'expo-router';
+import React, { useEffect, useId, useState } from 'react';
 import {
   AccessibilityInfo,
   Animated,
@@ -54,7 +55,7 @@ const BLOBS: BlobSpec[] = [
   { id: 'lp-aurora-amber', color: aurora.amber, size: 380, x: -120, y: 560, opacity: 0.38, duration: 12000, drift: [60, -70] },
 ];
 
-function Blob({ spec, still, speed }: { spec: BlobSpec; still: boolean; speed: number }) {
+function Blob({ spec, still, speed, gradientId }: { spec: BlobSpec; still: boolean; speed: number; gradientId: string }) {
   const t = useState(() => new Animated.Value(0))[0];
   useEffect(() => {
     if (still) return;
@@ -88,26 +89,37 @@ function Blob({ spec, still, speed }: { spec: BlobSpec; still: boolean; speed: n
     >
       <Svg width={spec.size} height={spec.size} viewBox="0 0 100 100">
         <Defs>
-          <RadialGradient id={spec.id} cx="50" cy="50" r="50" gradientUnits="userSpaceOnUse">
+          <RadialGradient id={gradientId} cx="50" cy="50" r="50" gradientUnits="userSpaceOnUse">
             <Stop offset="0" stopColor={spec.color} stopOpacity={0.85} />
             <Stop offset="0.4" stopColor={spec.color} stopOpacity={0.45} />
             <Stop offset="0.75" stopColor={spec.color} stopOpacity={0.12} />
             <Stop offset="1" stopColor={spec.color} stopOpacity={0} />
           </RadialGradient>
         </Defs>
-        <Circle cx="50" cy="50" r="50" fill={`url(#${spec.id})`} />
+        <Circle cx="50" cy="50" r="50" fill={`url(#${gradientId})`} />
       </Svg>
     </Animated.View>
   );
 }
 
-/** Drifting aurora light behind the app. Render once, behind transparent screens. */
+/** SVG ids must be unique in the web DOM, where every mounted tab scene stays in the document. */
+export function useSvgId(prefix: string) {
+  return `${prefix}-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+}
+
+/**
+ * Opaque base + drifting aurora light. Render it inside each screen (not as one shared layer
+ * behind transparent scenes): on web, inactive tab scenes stay mounted and stacked, so each
+ * scene must paint its own opaque background. Animation pauses while the screen is unfocused.
+ */
 export function AuroraBackground({ speed = 1 }: { speed?: number }) {
-  const still = useReduceMotion();
+  const reduce = useReduceMotion();
+  const focused = useIsFocused();
+  const uid = useSvgId('lp-aurora');
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg, overflow: 'hidden' }]}>
       {BLOBS.map((b) => (
-        <Blob key={b.id} spec={b} still={still} speed={speed} />
+        <Blob key={b.id} spec={b} still={reduce || !focused} speed={speed} gradientId={`${uid}-${b.id}`} />
       ))}
     </View>
   );
@@ -178,6 +190,7 @@ export function ProgressRing({
   const reduce = useReduceMotion();
   const v = useState(() => new Animated.Value(0))[0];
   const [shown, setShown] = useState(0);
+  const ringId = useSvgId('lp-ring');
 
   useEffect(() => {
     const id = v.addListener(({ value }) => setShown(value));
@@ -199,7 +212,7 @@ export function ProgressRing({
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ position: 'absolute', transform: [{ rotate: '-90deg' }] }}>
         <Defs>
-          <SvgLinearGradient id="lp-ring" x1="0" y1="0" x2="1" y2="1">
+          <SvgLinearGradient id={ringId} x1="0" y1="0" x2="1" y2="1">
             <Stop offset="0" stopColor="#FFD27A" />
             <Stop offset="1" stopColor={aurora.coral} />
           </SvgLinearGradient>
@@ -210,7 +223,7 @@ export function ProgressRing({
             cx={size / 2}
             cy={size / 2}
             r={r}
-            stroke="url(#lp-ring)"
+            stroke={`url(#${ringId})`}
             strokeWidth={stroke}
             strokeLinecap="round"
             fill="none"
@@ -231,7 +244,7 @@ export function GradientNumber({ value, size = 60, risk }: { value: string; size
   const width = Math.ceil(value.length * size * 0.68) + 6;
   const height = Math.ceil(size * 1.05);
   const stops = risk ? gradients.risk : gradients.streak;
-  const id = risk ? 'lp-num-risk' : 'lp-num';
+  const id = useSvgId(risk ? 'lp-num-risk' : 'lp-num');
   return (
     <Svg width={width} height={height} accessibilityLabel={value}>
       <Defs>

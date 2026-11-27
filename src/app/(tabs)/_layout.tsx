@@ -2,8 +2,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router/js-tabs';
 import { View, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AuroraBackground, GlassFill } from '../../components/glass';
-import { colors, fonts } from '../../theme';
+import { GlassFill } from '../../components/glass';
+import { colors, fonts, tabBar } from '../../theme';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -21,46 +21,43 @@ const icon = (name: string) =>
     );
   };
 
-const BAR_RADIUS = 32;
-
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <AuroraBackground />
-      <Tabs
-        safeAreaInsets={{ bottom: 0 }}
-        screenOptions={{
-          headerShown: false,
-          sceneStyle: { backgroundColor: 'transparent' },
-          tabBarActiveTintColor: '#FFFFFF',
-          tabBarInactiveTintColor: 'rgba(255,255,255,0.5)',
-          tabBarLabelStyle: { fontFamily: fonts.semibold, fontSize: 10, marginTop: 2 },
-          tabBarItemStyle: { paddingVertical: 6 },
-          tabBarStyle: {
-            position: 'absolute',
-            left: 16,
-            right: 16,
-            bottom: insets.bottom + 10,
-            height: 66,
-            borderRadius: BAR_RADIUS,
-            borderTopWidth: 0,
-            borderWidth: 1,
-            borderColor: 'rgba(255,255,255,0.15)',
-            backgroundColor: 'transparent',
-            elevation: 0,
-            paddingTop: 0,
-            paddingBottom: 0,
-            boxShadow: '0 12px 30px -10px rgba(0,0,0,0.65)',
-          },
-          tabBarBackground: () => <GlassFill radius={BAR_RADIUS} intensity={40} />,
-        }}
-      >
-        <Tabs.Screen name="index" options={{ title: 'Today', tabBarIcon: icon('flash') }} />
-        <Tabs.Screen name="plan" options={{ title: 'Plan', tabBarIcon: icon('calendar') }} />
-        <Tabs.Screen name="alarms" options={{ title: 'Alarms', tabBarIcon: icon('alarm') }} />
-        <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: icon('person') }} />
-      </Tabs>
-    </View>
+    <Tabs
+      safeAreaInsets={{ bottom: 0 }}
+      screenOptions={{
+        headerShown: false,
+        // Opaque on purpose: on web every visited tab scene stays mounted and stacked, and only
+        // the focused scene's background hides the others. Each Screen paints its own aurora.
+        sceneStyle: { backgroundColor: colors.bg },
+        tabBarActiveTintColor: '#FFFFFF',
+        tabBarInactiveTintColor: 'rgba(255,255,255,0.5)',
+        tabBarLabelStyle: { fontFamily: fonts.semibold, fontSize: 10, marginTop: 2 },
+        tabBarItemStyle: { paddingVertical: 6 },
+        tabBarStyle: {
+          position: 'absolute',
+          left: 16,
+          right: 16,
+          bottom: insets.bottom + tabBar.gap,
+          height: tabBar.height,
+          borderRadius: tabBar.radius,
+          borderTopWidth: 0,
+          borderWidth: 1,
+          borderColor: 'rgba(255,255,255,0.15)',
+          backgroundColor: 'transparent',
+          elevation: 0,
+          paddingTop: 0,
+          paddingBottom: 0,
+          boxShadow: '0 12px 30px -10px rgba(0,0,0,0.65)',
+        },
+        tabBarBackground: () => <GlassFill radius={tabBar.radius} intensity={40} />,
+      }}
+    >
+      <Tabs.Screen name="index" options={{ title: 'Today', tabBarIcon: icon('flash') }} />
+      <Tabs.Screen name="plan" options={{ title: 'Plan', tabBarIcon: icon('calendar') }} />
+      <Tabs.Screen name="alarms" options={{ title: 'Alarms', tabBarIcon: icon('alarm') }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: icon('person') }} />
+    </Tabs>
   );
 }
